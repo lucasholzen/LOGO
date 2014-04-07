@@ -135,12 +135,12 @@ def main():
                             m, c = LineEq(x, y)
 
                     if(len(x) > 2):
-                        coords = [x, y] #STUPID SORTING PIECE OF CRAP
-                        coords.sort()
-                        lines.append(coords)
+                        #coords =  #STUPID SORTING PIECE OF CRAP
+                        #coords.sort()
+                        lines.append([x, y])
                         
 
-    lines = Consolidate(lines)
+    #lines = Consolidate(lines)
 
         
     #cv2.waitKey(0)
