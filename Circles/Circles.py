@@ -106,7 +106,7 @@ def main():
     lines = []
     # find which circles line up
     line_threshold = 40
-    if len(final_circles) > 3:
+    if len(final_circles) > 2:
         count = len(final_circles)
         for c_i, circle in enumerate(final_circles):
             if(c_i+1 < count):
@@ -118,31 +118,21 @@ def main():
                     x.append(final_circles[start][0])
                     y.append(final_circles[start][1])
                     m, c = LineEq(x, y)
-
                     for i in range(c_i+2, count-1):
-                
                         pt = np.array(np.int32([final_circles[i][0], final_circles[i][1]]))
-                        
                         if i == start:
                             continue
-
-
                         dist = DistanceFromPtToLine(m, c, pt)
-
                         if dist < line_threshold:
                             x.append(pt[0])
                             y.append(pt[1])
                             m, c = LineEq(x, y)
-
                     if(len(x) > 2):
-                        #coords =  #STUPID SORTING PIECE OF CRAP
-                        #coords.sort()
                         lines.append([x, y])
-                        
 
-    #lines = Consolidate(lines)
+    master_list = Consolidate(lines)
 
-        
+
     #cv2.waitKey(0)
     font = cv2.FONT_HERSHEY_SIMPLEX
     image = original_images[0]
@@ -155,7 +145,7 @@ def main():
         cv2.putText(image,str(circle),(circle[0]+100*j,circle[1]+100*j),font,2.0,(255,255,255),3)
         cv2.line(image,(circle[0]+100*j,circle[1]+100*j),(circle[0],circle[1]),(255,255,255),3)
         
-    for line in lines:
+    for line in master_list:
         pt_max = (max(line[0]),max(line[1]))
         pt_min = (min(line[0]),min(line[1]))
         color = (0,255,255,0)
@@ -188,7 +178,12 @@ def CircleCompare(circle1, circle2):
     return 0
 
 def Normalize(pt1, pt2):
-    return (pt1 - pt2) / np.linalg.norm(pt1 - pt2)
+    a = np.array(pt1-pt2, dtype = np.float)
+    b = np.float(np.linalg.norm(pt1-pt2))
+    c = 0
+    if(b!=0):
+        c = np.divide(a,b) 
+    return c
 
 def LineEq(x, y):
     A = np.vstack([x, np.ones(len(x))]).T
@@ -202,16 +197,44 @@ def DistanceFromPtToLine(m, c, pt):
     return dist
 
 def Consolidate(lines):
-    lines = []
+    changes = False
+    master_list =lines
+    while(changes == False):
+        changes, master_list = CheckAndMerge(master_list)
+    return master_list
 
-def Contains(small, big):
-    for i in xrange(len(big)-len(small)+1):
-        for j in xrange(len(small)):
-            if big[i+j] != small[j]:
-                break
-        else:
-            return i, i+len(small)
+def CheckAndMerge(lines):
+    for n in range(len(lines)):
+        for m in range(n+1,len(lines)):
+            if(PointsMatch(lines[n], lines[m])):
+                temp = Merge([lines[n], lines[m]])
+                lines.remove(lines[m])
+                lines.remove(lines[n])
+                lines.append(temp)
+                return False, lines
+    return True, lines
+
+def PointsMatch(line, target_line):
+    hit_count = 0
+    for n in range(len(target_line[0])):
+        pt = ([target_line[0][n],target_line[1][n]])
+        if((pt[0] in line[0]) and (pt[1] in line[1])):
+            hit_count = hit_count + 1
+        if (hit_count > 1):
+            return True
     return False
+
+def Merge(lines_to_merge):
+    master_list = [[],[]]
+    for line in lines_to_merge:
+        for n in range(len(line[0])):
+            pt = ([line[0][n],line[1][n]])
+            if((pt[0] not in master_list[0]) or (pt[1] not in master_list[1])):
+                master_list[0].append(pt[0])
+                master_list[1].append(pt[1])
+    return master_list
+
+
 
 if __name__ == "__main__":
     main()
