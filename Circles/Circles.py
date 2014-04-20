@@ -7,7 +7,7 @@ from pylab import array, plot, show, axis, arange, figure, uint8
 import numpy as np
 from scipy import stats
 from MachineLearning import *
-img_path = '../../../images/'
+img_path = 'images/'
 
 image_file_L1 = '2014-04-05 15.04.33.jpg'
 image_file_L2 = '2014-04-05 15.05.15.jpg'
@@ -17,33 +17,127 @@ image_file_S2 = '2014-04-05 15.06.09.jpg'
 image_file_B1 = '2014-04-05 15.04.59.jpg'
 image_file_B2 = '2014-04-05 15.05.09.jpg'
 
+MIN_MATCH_COUNT = 50
 
 
 def main():
     #ch = 0
-    original_img = cv2.imread(img_path + image_file_L2, 0)
+    original_img = cv2.imread(img_path + "2014-04-05 15.04.59.jpg", 0)
+    matching_img = cv2.imread(img_path + "2014-04-12 16.54.52.jpg", 0)
+
+    if(original_img == None or matching_img == None):
+        print "No image found, quitting...."
+        return 1
     #sf = 2;
     #height, width = img.shape
     #small_img = cv.CreateImage((int(height/sf), int(width/sf)), 0, ch)
     #cv2.Resize(img, small_img, interpolation = cv.CV_INTER_CUBIC)
+    
+    img = original_img.copy()
+
+    box = findBindingBox(img)
+    
+    cv2.drawContours(img,[box],0,(0,0,255),5)
+    
+    figure()
+    plt.imshow(img)
+    plt.show()
+    return
+
 
     #img = cv2.medianBlur(img,5)
     img = cv2.blur(original_img,(5,5))
-    imgc = cv2.cvtColor(img,cv2.COLOR_GRAY2BGR)
+    m_img = cv2.blur(matching_img,(5,5))
+    #imgc = cv2.cvtColor(img,cv2.COLOR_GRAY2BGR)
+
+    maxValue = 60
+    blockSize = 7
+    C = 3
+    threshold = cv2.cv.CV_ADAPTIVE_THRESH_MEAN_C
+            
+    img2 = cv2.adaptiveThreshold(img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
+    m_img2 = cv2.adaptiveThreshold(m_img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
+
+       
+    
+    del img
+    del m_img
+    
+    # Initiate ORB detector
+    #orb = cv2.ORB()
+    #kp = orb.detect(img2,None)
+    #m_kp = orb.detect(m_img2,None)
+    #kp, des = orb.compute(img2, kp)
+    #m_kp, m_des = orb.compute(m_img2, m_kp)
+    
+    # Initiate SIFT detector
+    sift = cv2.SIFT()
+    kp, des = sift.detectAndCompute(img2,None)
+    m_kp, m_des = sift.detectAndCompute(m_img2,None)
     
 
+    # create BFMatcher object
+    #bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    bf = cv2.BFMatcher()
+
+    # Match descriptors.
+    #matches = bf.match(des,m_des)
+    matches = bf.knnMatch(des,m_des,k=2)
+
+    good = []
+    for m,n in matches:
+        if m.distance < 0.75*n.distance:
+            good.append([m])
+
+    # Sort them in the order of their distance.
+    #matches = sorted(matches, key = lambda x:x.distance)
+
+    if len(good) > MIN_MATCH_COUNT:
+        print "Lots of good matches found, %d/%d" % (len(good),MIN_MATCH_COUNT)
+        #src_pts = np.float32([ kp[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
+        #dst_pts = np.float32([ m_kp[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+
+        #M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
+        #matchesMask = mask.ravel().tolist()
+
+        #h,w = img1.shape
+        #pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+        #dst = cv2.perspectiveTransform(pts,M)
+
+        #img2 = cv2.polylines(img2,[np.int32(dst)],True,255,3, cv2.LINE_AA)
+
+    else:
+        print "Not enough good matches found, %d/%d" % (len(good),MIN_MATCH_COUNT)
+
+
+    img3 = cv2.drawKeypoints(img2,kp,color=(0,255,0), flags=0)
+    m_img3 = cv2.drawKeypoints(m_img2,m_kp,color=(0,255,0), flags=0)
     
+    #figure()
+    #plt.imshow(img3)
+    #figure()
+    #plt.imshow(m_img3)
+    #plt.show()   
+
+    return
+
     # Find the edges of an image
-    edges = cv2.Canny(img,50,150)
+    #edges = cv2.Canny(img,30,150)
+    edges = cv2.adaptiveThreshold(img,maxValue,cv2.cv.CV_ADAPTIVE_THRESH_MEAN_C,cv2.cv.CV_THRESH_BINARY,blockSize,C)
+
     #plt.subplot(121),plt.imshow(img,cmap = 'gray')
     #plt.title('Blurred Image'), plt.xticks([]), plt.yticks([])
     #plt.subplot(122),plt.imshow(edges,cmap = 'gray')
     #plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
     #plt.subplot(123),plt.imshow(original_img,cmap = 'gray')
     #plt.title('Original Image'), plt.xticks([]), plt.yticks([])
-    #plt.show()
+    figure()
+    plt.imshow(img)
+    figure()
+    plt.imshow(edges)
+    plt.show()
 
-    #return
+    return
 
 
 
@@ -105,11 +199,32 @@ def main():
     FindLinesFromCircles(final_circles, lines)
     lines = SortLines(lines)
     
-    # find if any lines intersect at 90°
+    # find if any lines intersect at 90 degrees or 45 degrees
+    line_vecs = []
+    angle_threshold = (math.pi/180)*5
+    angles = np.zeros((len(lines),len(lines)), dtype = int)
+    for line in lines:
+        m, c = LineEq(line[0], line[1])
+        vec = Normalize(np.array([0,c]),np.array([1,m+c]))
+        line_vecs.append(vec)
+    for i in range(0,len(line_vecs)):
+        for j in range(i+1,len(line_vecs)):
+            cos_theta = np.dot(line_vecs[i], line_vecs[j].T)
+            if((cos_theta > math.cos(math.pi/4+angle_threshold)) and (cos_theta < math.cos(math.pi/4-angle_threshold))):
+               angles[i][j] = 45
+            if((cos_theta > math.cos(math.pi/2+angle_threshold)) and (cos_theta < math.cos(math.pi/2-angle_threshold))):
+               angles[i][j] = 90
+            if((cos_theta > math.cos(math.pi*.7+angle_threshold)) and (cos_theta < math.cos(math.pi*.7-angle_threshold))):
+               angles[i][j] = 125
+            if(cos_theta > math.cos(0+angle_threshold)):
+               angles[i][j] = 180
+
+
+
     # put a circle there if there isn't one already
     # add it to the two lines that are intersecting at it
     # fill in circles are are missing between it and the line at average intervals
-
+    
 
 
 
@@ -145,9 +260,74 @@ def main():
     return
 
 
+def findBindingBox(img):
+    img = cv2.blur(img,(10,10))
+    er_img = np.zeros(img.shape,np.uint8)
+    
+    maxValue = 60
+    blockSize = 7
+    C = 3
+    threshold = cv2.cv.CV_ADAPTIVE_THRESH_MEAN_C
+    
+    img2 = cv2.adaptiveThreshold(img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
+    cv2.threshold(img2,maxValue-1, 255, cv2.THRESH_BINARY, dst=img2)
+
+    #figure()
+    #plt.imshow(img2)
+    #plt.show()
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(15,15))
+
+    for n in range(15):
+        kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(10,10))
+        #er_img = cv2.morphologyEx(img2, cv2.MORPH_OPEN, kernel)
+        eroded = cv2.erode(img2,kernel)
+        temp = cv2.dilate(eroded,kernel)
+        temp = cv2.subtract(img2,temp)
+        er_img = cv2.bitwise_or(er_img,temp)
+
+    for n in range(5):
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(20,20))
+        temp = cv2.dilate(er_img,kernel)
+        er_img = cv2.add(er_img,temp)
+
+    temp = er_img.copy()
+
+    contours, hierarchy = cv2.findContours(temp,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+
+    contours.sort(key=lambda x: len(x), reverse=True)
+
+    new_contours = sorted(contours, key=lambda x: len(x), reverse=True) 
+
+    cnt = contours[0]
+    #cv2.drawContours(img,cnt,-1,(0,255,255),20)
+
+    #x,y,w,h = cv2.boundingRect(contours[0])
+    #cv2.drawContours(img,contours[0],1,(0,255,0),3)
+    #cv2.rectangle(er_img,(x,y),(x+w,y+h),(0,255,0),2)
+
+    rect = cv2.minAreaRect(contours[0])
+    box = cv2.cv.BoxPoints(rect)
+    box = np.int0(box)
+    #cv2.drawContours(img,[box],0,(0,0,255),2)
+    return box
 
 
-def CircleCompare(circle1, circle2):
+
+def nothing(x):
+    pass
+
+def nda2ipl(arr, dtype=None):
+    return cv.fromarray(np.ascontiguousarray(arr, dtype=dtype))
+
+def min_area_rect2(points):
+    storage = cv.CreateMemStorage()
+    cv_points = nda2ipl(points.reshape((-1, 1, 2)))
+    out = cv.MinAreaRect2(cv_points, storage)
+    return out
+
+
+def CircleMatch(circle1, circle2):
     d_th = 55
     r_th = 30
     i_coords = np.array((circle1[0],circle1[1]),dtype=long)
@@ -247,7 +427,7 @@ def CombineCircles(circles_in_image, final_circles):
                     circle = dst[j]
                     res = False
                     if((dst_j, j) in previously_used): res = True
-                    if(CircleCompare(i,circle) and not res):
+                    if(CircleMatch(i,circle) and not res):
                         avg_list.append(circle)
                         previously_used.append((dst_j, j))
                         break

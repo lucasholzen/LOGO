@@ -15,3 +15,10 @@ http://docs.opencv.org/trunk/doc/py_tutorials/py_objdetect/py_face_detection/py_
 
 Implement a hough line detection system:
 http://docs.opencv.org/modules/imgproc/doc/feature_detection.html?highlight=hough#cv2.HoughLinesP
+
+
+For image outlining
+adaptive thresholding
+http://docs.opencv.org/modules/imgproc/doc/miscellaneous_transformations.html
+
+mean-shift algorithm
