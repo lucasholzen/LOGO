@@ -22,47 +22,32 @@ MIN_MATCH_COUNT = 50
 
 def main():
     #ch = 0
-    original_img = cv2.imread(img_path + "2014-04-05 15.04.59.jpg", 0)
-    matching_img = cv2.imread(img_path + "2014-04-12 16.54.52.jpg", 0)
+    original_img = cv2.imread(img_path + "2014-04-12 16.50.10.jpg", 0)
+    matching_img = cv2.imread(img_path + "2014-04-12 16.50.24.jpg", 0)
 
     if(original_img == None or matching_img == None):
         print "No image found, quitting...."
         return 1
-    #sf = 2;
-    #height, width = img.shape
-    #small_img = cv.CreateImage((int(height/sf), int(width/sf)), 0, ch)
-    #cv2.Resize(img, small_img, interpolation = cv.CV_INTER_CUBIC)
     
-    img = original_img.copy()
-
-    box = findBindingBox(img)
+    object = findObject(original_img.copy())
+    m_object = findObject(matching_img.copy())
     
-    cv2.drawContours(img,[box],0,(0,0,255),5)
-    
-    figure()
-    plt.imshow(img)
-    plt.show()
-    return
+    #figure()
+    #plt.imshow(img)
+    #figure()
+    #plt.imshow(img_b)
+    #figure()
+    #plt.imshow(dst)
+    #plt.show()
+    #return
 
 
     #img = cv2.medianBlur(img,5)
-    img = cv2.blur(original_img,(5,5))
-    m_img = cv2.blur(matching_img,(5,5))
     #imgc = cv2.cvtColor(img,cv2.COLOR_GRAY2BGR)
 
-    maxValue = 60
-    blockSize = 7
-    C = 3
-    threshold = cv2.cv.CV_ADAPTIVE_THRESH_MEAN_C
-            
-    img2 = cv2.adaptiveThreshold(img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
-    m_img2 = cv2.adaptiveThreshold(m_img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
-
-       
-    
-    del img
-    del m_img
-    
+    img2 = outline(object, C = 4, g_blur = 3)
+    m_img2 = outline(m_object, C = 4, g_blur = 3)       
+        
     # Initiate ORB detector
     #orb = cv2.ORB()
     #kp = orb.detect(img2,None)
@@ -113,11 +98,11 @@ def main():
     img3 = cv2.drawKeypoints(img2,kp,color=(0,255,0), flags=0)
     m_img3 = cv2.drawKeypoints(m_img2,m_kp,color=(0,255,0), flags=0)
     
-    #figure()
-    #plt.imshow(img3)
-    #figure()
-    #plt.imshow(m_img3)
-    #plt.show()   
+    figure()
+    plt.imshow(img3)
+    figure()
+    plt.imshow(m_img3)
+    plt.show()   
 
     return
 
@@ -259,35 +244,75 @@ def main():
     plt.show()
     return
 
+def findObject(original_img):
+    img = original_img.copy()
+    img_b = original_img.copy()
+        
+    box, rect = findBindingBox(img_b)
+    f_box = np.float32(box)
+        
+    #cv2.drawContours(img_b,[box],0,(0,0,255),5)    
+        
+    # always transform so the x-axis is longer than the y-axis
+    if box[1][1] > box[1][0]:
+        new_shape = np.float32([[0,rect[1][1]],[0,0],[rect[1][0],0],[rect[1][0],rect[1][1]]])
+        M = cv2.getPerspectiveTransform(f_box,new_shape)
+        coords = (np.int0(rect[1][0]),np.int0(rect[1][1]))
+        dst = cv2.warpPerspective(img,M,coords)
+    else:
+        new_shape = np.float32([[0,0],[rect[1][1],0],[rect[1][1],rect[1][0]],[0,rect[1][0]]])
+        M = cv2.getPerspectiveTransform(f_box,new_shape)
+        coords = (np.int0(rect[1][1]),np.int0(rect[1][0]))
+        dst = cv2.warpPerspective(img,M,coords)
 
-def findBindingBox(img):
-    img = cv2.blur(img,(10,10))
+    return dst
+
+def outline(original_img, maxValue = 255, blockSize = 7, C = 3, g_blur = 10):
+    threshold = cv2.cv.CV_ADAPTIVE_THRESH_MEAN_C
+
+    img = cv2.blur(original_img,(g_blur,g_blur))
+    img2 = cv2.adaptiveThreshold(img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
+    
+    outline_pts = np.where(img2 == 0)[0]
+    while len(outline_pts) < 100:
+        C = C - 1 
+        g_blur = g_blur - 2
+
+        img = cv2.blur(original_img,(g_blur,g_blur))
+        img2 = cv2.adaptiveThreshold(img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
+
+        showImg(img2)
+
+        outline_pts = np.where(img2 == 0)[0]
+        if C == 0 or g_blur < 2:
+            return -1
+
+    return img2
+
+def showImg(img):
+    figure()
+    plt.imshow(img)
+    plt.show()
+
+def findBindingBox(original_img):
+    img = cv2.blur(original_img,(10,10))
     er_img = np.zeros(img.shape,np.uint8)
     
-    maxValue = 60
-    blockSize = 7
-    C = 3
-    threshold = cv2.cv.CV_ADAPTIVE_THRESH_MEAN_C
+    img2 = outline(original_img.copy())
+
+    #showImg(img2)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(10,10))
     
-    img2 = cv2.adaptiveThreshold(img,maxValue,threshold,cv2.cv.CV_THRESH_BINARY,blockSize,C)
-    cv2.threshold(img2,maxValue-1, 255, cv2.THRESH_BINARY, dst=img2)
-
-    #figure()
-    #plt.imshow(img2)
-    #plt.show()
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(15,15))
-
-    for n in range(15):
-        kernel = cv2.getStructuringElement(cv2.MORPH_CROSS,(10,10))
-        #er_img = cv2.morphologyEx(img2, cv2.MORPH_OPEN, kernel)
+    for n in range(10):
         eroded = cv2.erode(img2,kernel)
         temp = cv2.dilate(eroded,kernel)
         temp = cv2.subtract(img2,temp)
         er_img = cv2.bitwise_or(er_img,temp)
+    
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(20,20))
 
-    for n in range(5):
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(20,20))
+    for n in range(7):
         temp = cv2.dilate(er_img,kernel)
         er_img = cv2.add(er_img,temp)
 
@@ -299,18 +324,20 @@ def findBindingBox(img):
 
     new_contours = sorted(contours, key=lambda x: len(x), reverse=True) 
 
-    cnt = contours[0]
-    #cv2.drawContours(img,cnt,-1,(0,255,255),20)
+    cnt = new_contours[0]
+    cv2.drawContours(img,cnt,-1,(0,255,255),20)
 
-    #x,y,w,h = cv2.boundingRect(contours[0])
-    #cv2.drawContours(img,contours[0],1,(0,255,0),3)
+    #x,y,w,h = cv2.boundingRect(cnt)
     #cv2.rectangle(er_img,(x,y),(x+w,y+h),(0,255,0),2)
 
-    rect = cv2.minAreaRect(contours[0])
+    cv2.drawContours(img,cnt,1,(0,255,0),3)
+
+    rect = cv2.minAreaRect(cnt)
     box = cv2.cv.BoxPoints(rect)
     box = np.int0(box)
-    #cv2.drawContours(img,[box],0,(0,0,255),2)
-    return box
+    cv2.drawContours(img,[box],0,(0,0,255),2)
+    #showImg(img)
+    return box, rect
 
 
 
